@@ -1,0 +1,716 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleCode {
+  PLATFORM_SUPER_ADMIN
+  OVERALL_CHAPLAINCY_ADMIN
+  CATHOLIC_SIDE_CHAPEL_ADMIN
+  UCC_PROTESTANT_SIDE_CHAPEL_ADMIN
+  ORGANISATION_REPRESENTATIVE
+  INDIVIDUAL_BOOKER
+  PUBLIC_VISITOR
+}
+
+enum BookingAuthority {
+  OVERALL_CHAPLAINCY
+  CATHOLIC_SIDE_CHAPEL
+  UCC_PROTESTANT_SIDE_CHAPEL
+}
+
+enum FacilityCode {
+  MAIN_CHAPEL
+  READING_ROOM
+  CONFERENCE_ROOM
+  CATHOLIC_SIDE_CHAPEL
+  PROTESTANT_SIDE_CHAPEL
+}
+
+enum BookingStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+  EXPIRED
+}
+
+enum EventType {
+  WEDDING
+  CONCERT
+  PRAYER_NIGHT
+  WORSHIP_SERVICE
+  CONFERENCE
+  FELLOWSHIP_MEETING
+  OTHER
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  FORTNIGHTLY
+  MONTHLY
+  CUSTOM_DATES
+  SELECTED_WEEKDAYS
+}
+
+enum FeeType {
+  FREE
+  FIXED
+  HOURLY
+  SESSION
+  DEPOSIT
+  SECURITY_DEPOSIT
+  CUSTOM
+  DISCOUNT
+  WAIVER
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  MOBILE_MONEY
+  CHEQUE
+  OTHER
+  GATEWAY_PENDING
+}
+
+enum ContentStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  CANCEL
+  RESCHEDULE
+  LOGIN
+  LOGOUT
+  PERMISSION_GRANT
+  PERMISSION_REVOKE
+  PAYMENT_RECORD
+  REFUND
+  MODERATE
+  SYSTEM
+}
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  emailVerified     DateTime?
+  passwordHash      String
+  firstName         String
+  lastName          String
+  phone             String?
+  isActive          Boolean   @default(true)
+  mustResetPassword Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  roles                 UserRole[]
+  organisationMembers   OrganisationMember[]
+  bookings              Booking[]             @relation("BookingApplicant")
+  bookingApprovals      BookingApproval[]
+  bookingAmendments     BookingAmendment[]
+  paymentRecords        PaymentRecord[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]            @relation("AuditActor")
+  announcementsAuthored Announcement[]        @relation("AnnouncementAuthor")
+  articlesAuthored      Article[]             @relation("ArticleAuthor")
+  eventsCreated         CommunityEvent[]      @relation("EventCreator")
+  passwordResetTokens   PasswordResetToken[]
+  sessions              Session[]
+  accounts              Account[]
+  exceptionalAccess     ExceptionalAccessGrant[] @relation("GrantedUser")
+  exceptionalAccessBy   ExceptionalAccessGrant[] @relation("GrantedBy")
+
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  code        RoleCode @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  id         String            @id @default(cuid())
+  userId     String
+  roleId     String
+  authority  BookingAuthority?
+  facilityId String?
+  grantedAt  DateTime          @default(now())
+  grantedBy  String?
+  notes      String?
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  facility   Facility?         @relation(fields: [facilityId], references: [id])
+
+  @@unique([userId, roleId, facilityId])
+  @@index([userId])
+}
+
+model ExceptionalAccessGrant {
+  id          String            @id @default(cuid())
+  userId      String
+  authority   BookingAuthority
+  facilityId  String?
+  reason      String
+  grantedById String
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime          @default(now())
+  user        User              @relation("GrantedUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy   User              @relation("GrantedBy", fields: [grantedById], references: [id])
+  facility    Facility?         @relation(fields: [facilityId], references: [id])
+
+  @@index([userId, authority])
+}
+
+model Facility {
+  id                 String           @id @default(cuid())
+  code               FacilityCode     @unique
+  slug               String           @unique
+  name               String
+  description        String           @db.Text
+  capacity           Int?
+  amenities          String[]
+  equipment          String[]
+  locationNote       String?
+  bookingAuthority   BookingAuthority
+  bookingPolicyText  String?          @db.Text
+  feeNotice          String           @default("Fees are confirmed after review by the responsible booking authority. Sample amounts in this system are fictional development placeholders only.")
+  coverImageUrl      String?
+  galleryUrls        String[]         @default([])
+  isActive           Boolean          @default(true)
+  setupBufferMinutes Int              @default(30)
+  cleanupBufferMinutes Int            @default(30)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  operatingHours     FacilityOperatingHours[]
+  closures           FacilityClosure[]
+  feeConfigs         FacilityFeeConfig[]
+  bookings           Booking[]
+  recurringSeries    RecurringBookingSeries[]
+  userRoles          UserRole[]
+  exceptionalAccess  ExceptionalAccessGrant[]
+  availabilityRules  AvailabilityRule[]
+}
+
+model FacilityOperatingHours {
+  id         String   @id @default(cuid())
+  facilityId String
+  dayOfWeek  Int
+  openTime   String
+  closeTime  String
+  isClosed   Boolean  @default(false)
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, dayOfWeek])
+}
+
+model FacilityClosure {
+  id         String   @id @default(cuid())
+  facilityId String
+  title      String
+  reason     String?
+  startsAt   DateTime
+  endsAt     DateTime
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, startsAt, endsAt])
+}
+
+model AvailabilityRule {
+  id               String    @id @default(cuid())
+  facilityId       String
+  name             String
+  minAdvanceHours  Int       @default(24)
+  maxAdvanceDays   Int       @default(365)
+  autoApprove      Boolean   @default(false)
+  holdMinutes      Int       @default(0)
+  activeFrom       DateTime?
+  activeTo         DateTime?
+  facility         Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+}
+
+model FacilityFeeConfig {
+  id          String   @id @default(cuid())
+  facilityId  String
+  feeType     FeeType
+  label       String
+  amountZmw   Decimal  @db.Decimal(12, 2)
+  isEstimate  Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  facility    Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+}
+
+model Organisation {
+  id                 String              @id @default(cuid())
+  name               String
+  slug               String              @unique
+  logoUrl            String?
+  coverImageUrl      String?
+  description        String?             @db.Text
+  mission            String?             @db.Text
+  vision             String?             @db.Text
+  affiliation        String?
+  meetingDays        String[]
+  meetingTimes       String?
+  visitorInfo        String?             @db.Text
+  publicEmail        String?
+  publicPhone        String?
+  website            String?
+  socialLinks        Json?
+  isSideChapelAccount Boolean            @default(false)
+  linkedFacilityId   String?
+  profileStatus      ContentStatus       @default(DRAFT)
+  isPublic           Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  members            OrganisationMember[]
+  bookings           Booking[]
+  recurringSeries    RecurringBookingSeries[]
+  announcements      Announcement[]
+  articles           Article[]
+  events             CommunityEvent[]
+  feeAssessments     FeeAssessment[]
+  paymentObligations PaymentObligation[]
+}
+
+model OrganisationMember {
+  id             String   @id @default(cuid())
+  organisationId String
+  userId         String
+  title          String?
+  isPrimary      Boolean  @default(false)
+  canManageProfile Boolean @default(true)
+  canBook        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organisationId, userId])
+}
+
+model Booking {
+  id                  String        @id @default(cuid())
+  reference           String        @unique
+  facilityId          String
+  applicantId         String?
+  organisationId      String?
+  eventType           EventType
+  title               String
+  description         String        @db.Text
+  requestedDate       DateTime      @db.Date
+  startTime           DateTime
+  endTime             DateTime
+  setupMinutes        Int           @default(0)
+  cleanupMinutes      Int           @default(0)
+  expectedAttendance  Int?
+  equipmentNeeds      String?
+  layoutNeeds         String?
+  applicantName       String
+  contactEmail        String
+  contactPhone        String?
+  termsAccepted       Boolean       @default(false)
+  status              BookingStatus @default(DRAFT)
+  authority           BookingAuthority
+  isRecurringOccurrence Boolean     @default(false)
+  seriesId            String?
+  occurrenceDate      DateTime?     @db.Date
+  publicLabel         String        @default("Reserved")
+  notesInternal       String?       @db.Text
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  facility            Facility      @relation(fields: [facilityId], references: [id])
+  applicant           User?         @relation("BookingApplicant", fields: [applicantId], references: [id])
+  organisation        Organisation? @relation(fields: [organisationId], references: [id])
+  series              RecurringBookingSeries? @relation(fields: [seriesId], references: [id])
+  approvals           BookingApproval[]
+  amendments          BookingAmendment[]
+  attachments         Attachment[]
+  feeAssessments      FeeAssessment[]
+  paymentObligations  PaymentObligation[]
+  timeline            BookingTimelineEvent[]
+
+  @@index([facilityId, startTime, endTime])
+  @@index([status])
+  @@index([authority])
+  @@index([seriesId])
+  @@index([reference])
+}
+
+model RecurringBookingSeries {
+  id                 String              @id @default(cuid())
+  reference          String              @unique
+  facilityId         String
+  organisationId     String?
+  createdById        String?
+  title              String
+  description        String              @db.Text
+  eventType          EventType
+  frequency          RecurrenceFrequency
+  weekdays           Int[]
+  customDates        DateTime[]
+  startDate          DateTime            @db.Date
+  endDate            DateTime            @db.Date
+  startTimeLocal     String
+  endTimeLocal       String
+  setupMinutes       Int                 @default(0)
+  cleanupMinutes     Int                 @default(0)
+  expectedAttendance Int?
+  status             BookingStatus       @default(SUBMITTED)
+  authority          BookingAuthority
+  academicPeriod     String?
+  renewalReminderAt  DateTime?
+  expiresAt          DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  facility           Facility            @relation(fields: [facilityId], references: [id])
+  organisation       Organisation?       @relation(fields: [organisationId], references: [id])
+  rule               RecurrenceRule?
+  exceptions         RecurrenceException[]
+  occurrences        Booking[]
+}
+
+model RecurrenceRule {
+  id         String                 @id @default(cuid())
+  seriesId   String                 @unique
+  rruleText  String?
+  interval   Int                    @default(1)
+  byMonthDay Int?
+  notes      String?
+  series     RecurringBookingSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+}
+
+model RecurrenceException {
+  id         String                 @id @default(cuid())
+  seriesId   String
+  date       DateTime               @db.Date
+  reason     String
+  isHoliday  Boolean                @default(false)
+  isMaintenance Boolean             @default(false)
+  createdAt  DateTime               @default(now())
+  series     RecurringBookingSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([seriesId, date])
+}
+
+model BookingApproval {
+  id         String        @id @default(cuid())
+  bookingId  String
+  actorId    String
+  action     BookingStatus
+  comment    String?
+  createdAt  DateTime      @default(now())
+  booking    Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actor      User          @relation(fields: [actorId], references: [id])
+
+  @@index([bookingId])
+}
+
+model BookingAmendment {
+  id         String   @id @default(cuid())
+  bookingId  String
+  actorId    String
+  summary    String
+  beforeJson Json
+  afterJson  Json
+  createdAt  DateTime @default(now())
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actor      User     @relation(fields: [actorId], references: [id])
+}
+
+model BookingTimelineEvent {
+  id        String   @id @default(cuid())
+  bookingId String
+  label     String
+  detail    String?
+  createdAt DateTime @default(now())
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, createdAt])
+}
+
+model BookingPolicy {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  body        String   @db.Text
+  authority   BookingAuthority?
+  isPublished Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  bookingId    String?
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  storagePath  String
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  booking      Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+}
+
+model FeeAssessment {
+  id             String        @id @default(cuid())
+  bookingId      String?
+  organisationId String?
+  feeType        FeeType
+  label          String
+  amountZmw      Decimal       @db.Decimal(12, 2)
+  isEstimate     Boolean       @default(true)
+  isApproved     Boolean       @default(false)
+  dueDate        DateTime?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  booking        Booking?      @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+}
+
+model PaymentObligation {
+  id             String        @id @default(cuid())
+  bookingId      String?
+  organisationId String?
+  description    String
+  amountDueZmw   Decimal       @db.Decimal(12, 2)
+  amountPaidZmw  Decimal       @default(0) @db.Decimal(12, 2)
+  status         PaymentStatus @default(PENDING)
+  dueDate        DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  booking        Booking?      @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  organisation   Organisation? @relation(fields: [organisationId], references: [id])
+  payments       PaymentRecord[]
+  refunds        RefundRecord[]
+  receipts       Receipt[]
+}
+
+model PaymentRecord {
+  id             String            @id @default(cuid())
+  obligationId   String
+  recordedById   String
+  amountZmw      Decimal           @db.Decimal(12, 2)
+  method         PaymentMethod
+  reference      String?
+  notes          String?
+  verified       Boolean           @default(false)
+  screenshotNote String?           // uploads alone never mark payment successful
+  createdAt      DateTime          @default(now())
+  obligation     PaymentObligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+  recordedBy     User              @relation(fields: [recordedById], references: [id])
+}
+
+model RefundRecord {
+  id           String            @id @default(cuid())
+  obligationId String
+  amountZmw    Decimal           @db.Decimal(12, 2)
+  reason       String
+  reference    String?
+  createdAt    DateTime          @default(now())
+  obligation   PaymentObligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+}
+
+model Receipt {
+  id           String            @id @default(cuid())
+  obligationId String
+  receiptNo    String            @unique
+  issuedAt     DateTime          @default(now())
+  amountZmw    Decimal           @db.Decimal(12, 2)
+  notes        String?
+  obligation   PaymentObligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+}
+
+model Announcement {
+  id             String         @id @default(cuid())
+  organisationId String?
+  authorId       String
+  title          String
+  summary        String?
+  body           String         @db.Text
+  status         ContentStatus  @default(DRAFT)
+  publishedAt    DateTime?
+  featured       Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organisation   Organisation?  @relation(fields: [organisationId], references: [id])
+  author         User           @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+}
+
+model Article {
+  id             String         @id @default(cuid())
+  organisationId String?
+  authorId       String
+  title          String
+  slug           String         @unique
+  summary        String?
+  body           String         @db.Text
+  byline         String?
+  coverImageUrl  String?
+  galleryUrls    String[]       @default([])
+  photoCaption   String?
+  status         ContentStatus  @default(DRAFT)
+  publishedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organisation   Organisation?  @relation(fields: [organisationId], references: [id])
+  author         User           @relation("ArticleAuthor", fields: [authorId], references: [id])
+}
+
+model CommunityEvent {
+  id             String         @id @default(cuid())
+  organisationId String?
+  createdById    String
+  title          String
+  summary        String?
+  location       String?
+  startsAt       DateTime
+  endsAt         DateTime
+  coverImageUrl  String?
+  galleryUrls    String[]       @default([])
+  status         ContentStatus  @default(DRAFT)
+  isPublic       Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  organisation   Organisation?  @relation(fields: [organisationId], references: [id])
+  createdBy      User           @relation("EventCreator", fields: [createdById], references: [id])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  channel   NotificationChannel @default(IN_APP)
+  title     String
+  body      String
+  linkUrl   String?
+  readAt    DateTime?
+  emailSent Boolean             @default(false)
+  emailMeta Json?
+  createdAt DateTime            @default(now())
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String?
+  action     AuditAction
+  entityType String
+  entityId   String?
+  summary    String
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime    @default(now())
+  actor      User?       @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}

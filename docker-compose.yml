@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: unza-chapel-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: unza_chapel
+      POSTGRES_PASSWORD: unza_chapel_dev_password
+      POSTGRES_DB: unza_chapel_portal
+    volumes:
+      - unza_chapel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unza_chapel -d unza_chapel_portal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  unza_chapel_pgdata:

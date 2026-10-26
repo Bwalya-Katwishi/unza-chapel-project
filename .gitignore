@@ -23,6 +23,9 @@
 # misc
 .DS_Store
 *.pem
+*.bak
+*.bak*
+*.zip
 
 # debug
 npm-debug.log*
@@ -30,8 +33,24 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — never commit secrets
+.env
+.env.*
+!.env.example
+
+# uploads and local data
+/uploads
+/public/uploads/facilities/*
+!/public/uploads/facilities/.gitkeep
+*.db
+*.sqlite
+/.pgdata
+/pgdata
+
+# test / playwright
+/test-results
+/playwright-report
+/blob-report
 
 # vercel
 .vercel
