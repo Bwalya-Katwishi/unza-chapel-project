@@ -8,11 +8,13 @@
 
 ## Database
 
-1. Create an empty database and application role with limited privileges
-2. Set `DATABASE_URL`
-3. Run `npx prisma migrate deploy`
-4. Do **not** run the development seed in production
+1. Create a **hosted** PostgreSQL database (Neon, Supabase, Railway, etc.). Local `127.0.0.1` will not work on Vercel.
+2. Set `DATABASE_URL` (include `?sslmode=require` for Neon/cloud providers)
+3. Run `npx prisma migrate deploy` (this also runs automatically on Vercel build)
+4. Optionally seed once with `npm run db:seed` against the cloud URL
 5. Create the first administrator through a controlled process (see README)
+
+See [VERCEL.md](./VERCEL.md) for the Neon + Vercel walkthrough.
 
 ## Application
 
